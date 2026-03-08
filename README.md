@@ -225,4 +225,14 @@ scp ubuntu@<ip>:~/Veto/results.json ./results-cloud.json
 - Local smoke test passed on Apple M1 Mac mini (Python 3.10, PyTorch CPU)
 - Cloud run pending: Lambda Labs had no A100 capacity at time of last attempt; Vast.ai is the recommended alternative
 
-**Next action for agent:** Help user launch a cloud GPU instance (Lambda Labs or Vast.ai), run `run_experiments.sh`, and retrieve `results.json`. Once results are in, build the gate sparsity probing notebook.
+### 2026-03-08 — Cloud run in progress
+
+**Bug fixed:** `torch.compile` was incompatible with the forward hook in `estimate_loss()`. Fixed in `train.py` — evaluation now uses `raw_model` (uncompiled) instead of the compiled model wrapper.
+
+**Cloud instance:** RunPod, A100 SXM, pod ID `ksskrgrxd1zj79`
+- SSH: `ssh root@64.247.196.119 -p 16856 -i ~/.ssh/id_ed25519`
+- Datasets prepared: TinyStories ✅, FineWeb-Edu ✅
+- Experiment grid launched via `nohup bash run_experiments.sh > experiments.log 2>&1 &`
+- Grid 1 (micro, TinyStories) running as of ~20:25 UTC
+
+**Next action for agent:** Check if the run completed by tailing `~/Veto/experiments.log`. If complete, copy `results.json` and the `out/` directory back to local machine via `scp`, then **terminate the RunPod instance immediately** to stop billing. Once results are in hand, build the gate sparsity probing notebook to test Prediction 4.
