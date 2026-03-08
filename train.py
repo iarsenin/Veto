@@ -239,9 +239,13 @@ def _append_metric(record: dict):
 # ── loss estimation with hidden-state variance telemetry ─────────────────────
 @torch.no_grad()
 def estimate_loss():
-    """Return train/val losses and the variance of the final block's output."""
+    """Return train/val losses and the variance of the final block's output.
+
+    Uses raw_model (uncompiled) for evaluation to avoid torch.compile
+    incompatibility with forward hooks.
+    """
     out = {}
-    model.eval()
+    raw_model.eval()
 
     # Register a hook on the last transformer block to capture its output
     hidden_samples = []
@@ -256,7 +260,7 @@ def estimate_loss():
         for k in range(eval_iters):
             X, Y = get_batch(split)
             with ctx:
-                logits, loss = model(X, Y)
+                logits, loss = raw_model(X, Y)
             losses[k] = loss.item()
         out[split] = losses.mean()
 
@@ -269,7 +273,7 @@ def estimate_loss():
     else:
         hidden_var = float('nan')
 
-    model.train()
+    raw_model.train()
     return out, hidden_var
 
 
