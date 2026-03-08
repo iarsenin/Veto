@@ -235,4 +235,25 @@ scp ubuntu@<ip>:~/Veto/results.json ./results-cloud.json
 - Experiment grid launched via `nohup bash run_experiments.sh > experiments.log 2>&1 &`
 - Grid 1 (micro, TinyStories) running as of ~20:25 UTC
 
-**Next action for agent:** Check if the run completed by tailing `~/Veto/experiments.log`. If complete, copy `results.json` and the `out/` directory back to local machine via `scp`, then **terminate the RunPod instance immediately** to stop billing. Once results are in hand, build the gate sparsity probing notebook to test Prediction 4.
+**Next action for agent — follow these steps in order:**
+
+1. **Check if the run is still going or finished:**
+   ```bash
+   ssh root@64.247.196.119 -p 16856 -i ~/.ssh/id_ed25519
+   tail -50 ~/Veto/experiments.log
+   ```
+   - If you see `Done. See results.json` at the bottom → run is complete, go to step 2
+   - If you see training iterations printing → still running, check back later
+   - If the SSH connection is refused → the RunPod instance was terminated; results should already be in `out-cloud/` and `results-cloud.json` locally if they were copied
+
+2. **Copy results to local machine** (run on the Mac, not on the server):
+   ```bash
+   scp -P 16856 -i ~/.ssh/id_ed25519 root@64.247.196.119:~/Veto/results.json ./results-cloud.json
+   scp -P 16856 -i ~/.ssh/id_ed25519 -r root@64.247.196.119:~/Veto/out ./out-cloud
+   ```
+
+3. **Terminate the RunPod instance** — go to [runpod.io](https://runpod.io) → Pods → stop/terminate pod `ksskrgrxd1zj79`. **Do this immediately after copying — it bills by the hour.**
+
+4. **Interpret results** — open `results-cloud.json` and compare `final_val_loss_mean` for `micro/baseline` vs `micro/hcrg` and `standard/baseline` vs `standard/hcrg`. Lower or equal HCRG loss = Prediction 3 confirmed.
+
+5. **Build gate sparsity probing notebook** (Prediction 4) — load an HCRG checkpoint from `out-cloud/`, register forward hooks on all `gate_proj` layers, run diverse prompts through the model, plot gate activation distributions per head per layer.
