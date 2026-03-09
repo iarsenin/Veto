@@ -1,0 +1,20 @@
+---
+description: Git commit and push workflow for the Veto project
+alwaysApply: true
+---
+
+# Git Commit Workflow
+
+Commit and push to GitHub when changes are **meaningful and tested**:
+
+- After fixing a bug (verify the fix works before committing)
+- After adding a new script or notebook (test it runs)
+- After updating documentation (README, docstrings)
+- **Before launching a long-running experiment** — always commit first so the code on GitHub matches what's running on the cloud
+
+Do NOT commit:
+- Incomplete or untested changes
+- Large binary files (checkpoints, datasets, .bin, .pt)
+- Experiment output directories (out/, out-fixed/)
+
+Use `python3.10` for local Python execution (torch is installed under 3.10, not 3.12).
