@@ -1,13 +1,23 @@
 """
 nanoGPT training script with HCRG dual-mode support and telemetry.
 
-New flags (pass as --key=value):
+Flags (pass as --key=value):
   --use_custom_arch=True   Use the HCRG architecture (custom_model.py)
+  --use_custom_arch=False  Use the baseline GPT architecture (model.py) [default]
   --seed=42                Master random seed (default 1337)
 
 Telemetry written to {out_dir}/metrics.jsonl:
+  {"type":"meta",  "arch":"hcrg"|"baseline", "seed":N, "n_layer":N, ...}
   {"type":"train", "iter":N, "loss":F, "grad_norm":F}
-  {"type":"eval",  "iter":N, "val_loss":F, "hidden_var":F}
+  {"type":"eval",  "iter":N, "train_loss":F, "val_loss":F, "hidden_var":F}
+
+Known quirk: when --compile=True, torch.compile causes a warmup phase where
+the first ~100 iterations run uncompiled before recompiling and continuing.
+This produces duplicate entries in metrics.jsonl for those early iters.
+Deduplicate by taking the last occurrence of each iter when analysing.
+
+Evaluation uses raw_model (uncompiled) to avoid torch.compile incompatibility
+with the forward hooks used for hidden_var telemetry.
 
 Run on a single GPU:
   python train.py --batch_size=32 --compile=False

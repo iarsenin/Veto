@@ -15,7 +15,7 @@ and applied to head outputs before they are merged by the output projection:
 
     y_gated[:,h,:] = g[:,h] * head_output[:,h,:]
 
-Bias is initialised to -5 so that sigmoid(-5) ≈ 0.0067, keeping essentially
+Bias is initialised to +5 so that sigmoid(+5) ≈ 0.993, keeping essentially
 all head magnitude at step-0 while leaving gradients open to learn repression.
 
 IsoFLOPs note: gate adds (n_embd * n_head + n_head) params per layer.
@@ -32,7 +32,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
-_GATE_BIAS_INIT = -5.0  # sigmoid(-5) ≈ 0.007  keeps ~99 % of head amplitude at init
+_GATE_BIAS_INIT = 5.0  # sigmoid(5) ≈ 0.993 — gates start nearly fully open
 
 
 class LayerNorm(nn.Module):

@@ -14,8 +14,16 @@ with the following structure:
   ...
 }
 
+Notes:
+  - "final val loss" is the val_loss from the LAST eval record in the file,
+    which corresponds to the last eval_interval checkpoint (not necessarily
+    the final training iteration).
+  - When --compile=True, metrics.jsonl may contain duplicate entries for
+    early iters due to torch.compile warmup. This script uses all records
+    as-is; the final eval record is still correct since it's the last one.
+
 Usage:
-    python analyze_results.py [--out results.json]
+    python analyze_results.py [--out results.json] [--base_dir out]
 """
 
 import argparse
