@@ -1,5 +1,5 @@
 ---
-description: Git commit and push workflow for the Veto project
+description: Git commit and push workflow and cloud data safety for the Veto project
 alwaysApply: true
 ---
 
@@ -18,3 +18,18 @@ Do NOT commit:
 - Experiment output directories (out/, out-fixed/)
 
 Use `python3.10` for local Python execution (torch is installed under 3.10, not 3.12).
+
+# Cloud Data Safety — CRITICAL
+
+**NEVER tell the user to stop/terminate a cloud pod until ALL valuable artifacts have been downloaded.** This includes:
+
+- All `metrics.jsonl` files
+- All checkpoint files (`ckpt.pt`) — these take hours of GPU time to regenerate
+- Any logs or results files
+
+Before suggesting the user stop a pod:
+1. Download ALL checkpoints and metrics locally
+2. Verify the downloads are complete (check file sizes, count files)
+3. Only THEN say it's safe to stop
+
+Checkpoints are on **container disk** (`/root/`), NOT the persistent volume (`/workspace/`). Container disk is wiped on pod termination. Always copy important files to `/workspace/` as a backup AND download locally before stopping.

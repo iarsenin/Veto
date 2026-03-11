@@ -43,8 +43,8 @@ The hypothesis is that gradient descent, given this explicit "shortcut", will le
 |---|---|---|---|
 | P1 | HCRG outperforms baseline on hallucination-sensitive tasks | TruthfulQA, HaluEval-Wild eval scripts | Not yet built |
 | P2 | Better long-context entity consistency | LongBench contradiction rate | Not yet built |
-| P3 | Minimal capability regression vs baseline | Val loss comparison — experiment grid | **Confirmed at both scales.** HCRG matches baseline at micro; **outperforms at standard** (-0.018 val loss) |
-| P4 | Gates are sparse and context-dependent, not uniform dampeners | Gate activation probing notebook | Notebook exists (`gate_probing.ipynb`), needs checkpoints from RunPod |
+| P3 | Minimal capability regression vs baseline | Val loss comparison — experiment grid | **Confirmed and reproduced.** HCRG matches baseline at micro; **outperforms at standard** (−0.016 to −0.018 val loss across two independent hardware runs) |
+| P4 | Gates are sparse and context-dependent, not uniform dampeners | Gate activation probing (`full_analysis.py`, `gate_probing.ipynb`) | **Confirmed.** Standard-scale gates show substantial suppression (mean=0.66), context dependence (within-prompt std=0.14), and clear layer structure (L0≈1.0, L11≈0.27). See Gate Probing section below. |
 | P5 | Higher resistance to adversarial prompt framing | PS/MV framework | Not yet built |
 
 ---
@@ -59,7 +59,8 @@ The hypothesis is that gradient descent, given this explicit "shortcut", will le
 ├── sample.py                 # Text generation from a checkpoint
 ├── run_experiments.sh        # Full 12-run experiment grid (2 grids × 2 archs × 3 seeds)
 ├── analyze_results.py        # Aggregates metrics.jsonl → results.json (runs on server)
-├── compare_runs.py           # Comprehensive local analysis: per-seed detail, cross-run comparison
+├── compare_runs.py           # Quick local analysis: per-seed detail, cross-run comparison
+├── full_analysis.py          # Complete analysis: gate probing (P4), convergence, cross-run, cross-seed
 ├── download_tinystories.py   # Downloads and tokenises TinyStories (Grid 1 dataset)
 ├── gate_probing.ipynb        # Gate activation analysis notebook (P4)
 ├── configurator.py           # CLI flag override utility
@@ -67,7 +68,8 @@ The hypothesis is that gradient descent, given this explicit "shortcut", will le
 ├── scaling_laws.ipynb        # Notebook for scaling analysis
 ├── transformer_sizing.ipynb  # Notebook for model sizing
 ├── config/                   # Named training configs (eval_gpt2*.py, finetune_*)
-├── out-fixed/                # Results from Run 2 (fixed init, +5 bias) — current experiment
+├── out-fixed/                # Run 2 metrics (A100, no checkpoints — lost on pod termination)
+├── out-run3/out/             # Run 3 full results (RTX 6000 Ada) — checkpoints + metrics
 └── data/
     ├── shakespeare_char/     # 1MB char-level dataset (smoke test only)
     ├── openwebtext/          # OWT data prep script
@@ -114,7 +116,7 @@ The `metrics.jsonl` format:
 - Use `--device=cpu --compile=False --dtype=float32` for CPU
 - Python 3.10 required locally (torch installed under 3.10, not 3.12)
 
-**Cloud:** RunPod A100-SXM4-80GB (current), also compatible with Lambda Labs / Vast.ai
+**Cloud:** RunPod — tested on A100-SXM4-80GB (Run 2) and RTX 6000 Ada 48GB (Run 3). Also compatible with Lambda Labs / Vast.ai
 - Use `--device=cuda --compile=True` (default in `run_experiments.sh`)
 
 ---
@@ -216,59 +218,139 @@ scp -P <port> -i ~/.ssh/id_ed25519 root@<ip>:/root/Veto/results.json ./results-f
 
 The first experiment used `_GATE_BIAS_INIT = -5.0`, which caused gates to start nearly fully **closed** (`sigmoid(-5) ≈ 0.007`). HCRG underperformed baseline at both scales (micro: +0.017 val loss gap, standard: +0.115). Gate probing revealed the model never learned to open the gates. Raw data has been deleted; numbers are preserved here for reference only.
 
-### Run 2 — Fixed Init (2026-03-09/10) — `out-fixed/`
+### Run 2 — Fixed Init (2026-03-09/10, A100) — `out-fixed/`
 
-All 12 runs complete. After fixing `_GATE_BIAS_INIT` to `+5.0`, gates initialize nearly fully open (`sigmoid(+5) ≈ 0.993`), as intended.
+All 12 runs complete. After fixing `_GATE_BIAS_INIT` to `+5.0`, gates initialize nearly fully open (`sigmoid(+5) ≈ 0.993`), as intended. Metrics only (checkpoints lost on pod termination).
 
-**Summary:**
+### Run 3 — Reproducibility (2026-03-11, RTX 6000 Ada) — `out-run3/out/`
+
+Full re-run of all 12 experiments on different hardware. All checkpoints and metrics saved.
+
+**Summary (Run 3, primary results):**
 
 | Grid/Arch | Val Loss (mean ± std) | Grad Norm | Notes |
 |---|---|---|---|
-| micro/baseline | 4.024 ± 0.006 | 1.92 | |
-| micro/hcrg | 4.025 ± 0.003 | 1.87 | Gap: +0.001 (noise-level) |
-| **standard/baseline** | **3.698 ± 0.011** | **1.23** | |
-| **standard/hcrg** | **3.680 ± 0.007** | **1.21** | **Gap: -0.018 (HCRG wins)** |
+| micro/baseline | 4.025 ± 0.006 | 1.88 | |
+| micro/hcrg | 4.023 ± 0.004 | 1.90 | Gap: −0.002 (noise-level) |
+| **standard/baseline** | **3.701 ± 0.016** | **1.23** | |
+| **standard/hcrg** | **3.685 ± 0.004** | **1.22** | **Gap: −0.016 (HCRG wins)** |
 
-**Per-seed detail (standard scale):**
+**Cross-hardware reproducibility (Run 2 A100 vs Run 3 RTX 6000 Ada):**
+
+| | Run 3 (RTX 6000 Ada) | Run 2 (A100) |
+|---|---|---|
+| standard HCRG-baseline gap | **−0.016** | **−0.018** |
+| micro HCRG-baseline gap | −0.002 | +0.001 |
+| Absolute val loss difference | < 0.005 per configuration | |
+
+**Per-seed detail (standard scale, Run 3):**
 
 | Seed | Baseline val loss | HCRG val loss | Delta |
 |---|---|---|---|
-| 42 | 3.690 | 3.673 | -0.017 |
-| 100 | 3.693 | 3.680 | -0.013 |
-| 1337 | 3.710 | 3.687 | -0.023 |
-| **Mean** | **3.698** | **3.680** | **-0.018** |
+| 42 | 3.687 | 3.680 | −0.007 |
+| 100 | 3.697 | 3.686 | −0.011 |
+| 1337 | 3.718 | 3.688 | −0.030 |
+| **Mean** | **3.701** | **3.685** | **−0.016** |
 
-**Convergence trajectory (standard, mean across 3 seeds):**
+**Convergence trajectory (standard, Run 3, mean across 3 seeds):**
 
 | Iter | Baseline | HCRG | Delta | Note |
 |---|---|---|---|---|
-| 0 | 10.979 | 10.974 | -0.005 | Tied — gates start open |
-| 500 | 5.651 | 5.638 | -0.013 | HCRG slightly ahead |
-| 1000 | 4.454 | 4.465 | +0.011 | Brief HCRG dip (gates adjusting) |
-| 1500 | 3.924 | 3.920 | -0.004 | Recovery — tied |
-| 2000 | 3.698 | 3.680 | **-0.018** | **HCRG pulls ahead** |
+| 0 | 10.979 ± 0.009 | 10.974 ± 0.013 | −0.005 | Tied — gates start open |
+| 500 | 5.658 ± 0.008 | 5.636 ± 0.004 | −0.022 | HCRG ahead early |
+| 1000 | 4.460 ± 0.011 | 4.470 ± 0.006 | +0.010 | Brief HCRG dip (gates adjusting) |
+| 1500 | 3.928 ± 0.012 | 3.920 ± 0.002 | −0.008 | HCRG recovers |
+| 2000 | 3.701 ± 0.016 | 3.685 ± 0.004 | **−0.016** | **HCRG pulls ahead** |
 
 **Analysis:**
 
-- **P3 exceeded expectations.** HCRG doesn't just avoid regression — it improves over baseline at standard scale by 0.018 val loss, consistently across all 3 seeds.
-- **The gain emerges late in training.** At iter 1000, HCRG is briefly behind (+0.011), likely as gates transition from their open initialization to learned suppression patterns. By iter 2000, the gates have settled and HCRG overtakes baseline.
-- **Lower seed variance.** HCRG std is 0.007 vs baseline's 0.011, suggesting the gating mechanism stabilizes training.
-- **Gradient norms are similar** (ratio 0.986), unlike the bugged run where closed gates starved gradient flow (ratio 0.66).
+- **P3 exceeded expectations and reproduced across hardware.** HCRG improves over baseline at standard scale by −0.016 to −0.018 val loss, consistently across all 3 seeds and two different GPUs (A100, RTX 6000 Ada).
+- **The gain emerges late in training.** At iter 1000, HCRG is briefly behind (+0.010), likely as gates transition from their open initialization to learned suppression patterns. By iter 2000, the gates have settled and HCRG overtakes baseline.
+- **Lower seed variance.** HCRG std is 0.004 vs baseline's 0.016, suggesting the gating mechanism stabilizes training.
+- **Gradient norms are similar** (ratio 0.989), unlike the bugged run where closed gates starved gradient flow (ratio 0.66).
 - **At micro scale, gates don't have enough training signal** (only 800 iters) to learn useful patterns — they stay near 1.0 and results are identical to baseline. The standard scale (2100 iters, 1B tokens) gives the gates time to differentiate.
+
+---
+
+## Gate Probing Results (P4)
+
+Full analysis performed via `full_analysis.py` on Run 3 checkpoints (`out-run3/out/`). Interactive visualization available in `gate_probing.ipynb`.
+
+### Standard Scale (12L/12H/768E, 1B tokens)
+
+**Overall gate statistics:**
+
+| Metric | Value |
+|---|---|
+| Mean gate value | 0.656 |
+| Std | 0.305 |
+| < 0.5 (actively suppressing) | 30.8% |
+| < 0.9 | 69.7% |
+| > 0.99 (fully open) | 6.1% |
+| Heads with mean gate < 0.9 | 120 / 144 (83%) |
+
+**Layer-wise structure — gates exhibit a clear depth gradient:**
+
+| Layer | Mean gate | <0.5 % | <0.9 % | Interpretation |
+|---|---|---|---|---|
+| L0 | 0.988 | 0.0% | 1.0% | Near-fully open — early features pass through |
+| L1–L4 | 0.79–0.87 | 2–5% | 48–75% | Modest suppression begins |
+| L5–L8 | 0.55–0.75 | 17–46% | 62–85% | Active gating — heads selectively suppressed |
+| L9–L11 | 0.27–0.51 | 51–84% | 87–100% | Heavy suppression — most heads partially silenced |
+
+**Context dependence:**
+
+| Metric | Value | Interpretation |
+|---|---|---|
+| Within-prompt std | 0.144 | High — same head gets different gate values at different positions |
+| Cross-prompt std | 0.077 | Moderate — gate patterns differ across input types |
+| Most variable head | L9/H3 (within-std=0.303) | This head's gate swings from ~0.3 to ~0.9 depending on token context |
+
+**Most suppressed heads (near-zero gates):**
+
+L11/H9 (mean=0.077), L10/H9 (0.119), L11/H10 (0.164), L10/H0 (0.173), L11/H1 (0.178). These heads are almost entirely silenced — the model learned they are not useful for next-token prediction.
+
+**Cross-seed consistency:**
+
+| Seed pair | Correlation (r) of per-head mean gates |
+|---|---|
+| 42 vs 100 | 0.767 |
+| 42 vs 1337 | 0.770 |
+| 100 vs 1337 | 0.741 |
+
+The layer-wise suppression gradient is consistent across all 3 seeds (L0≈0.98 open → L11≈0.26 closed), confirming this is a learned structural property, not a random seed artifact.
+
+**Gate bias vs weight analysis:**
+
+Biases barely moved from init (mean=4.90, init=5.0, delta=−0.10). All gating behavior comes from the **learned weights** (W_gate @ x), not the biases. The weight norms increase from L0 (14.1, high because L0 barely uses gating) through L1–L11 (3.4–5.9, growing with depth). This confirms the gates are genuinely computing context-dependent functions.
+
+### Micro Scale (4L/4H/256E, 100M tokens)
+
+Gates remained near-fully open: mean=0.993, 0% below 0.9. With only 800 training iterations, the gates never received enough gradient signal to learn suppression patterns. This explains why micro-scale HCRG matches baseline exactly.
+
+### P4 Verdict
+
+**P4 is confirmed.** At standard scale, HCRG gates are:
+1. **Sparse** — 83% of heads have mean gate < 0.9; deep layers are 50–84% below 0.5
+2. **Context-dependent** — within-prompt std of 0.14 means gates actively respond to token content
+3. **Structured** — clear depth gradient from open (L0) to heavily gated (L11)
+4. **Reproducible** — consistent patterns across 3 random seeds (r ≈ 0.76)
+
+The gates are NOT uniform dampeners. They learned selective, position-dependent head suppression.
 
 ---
 
 ## What to Build Next
 
-1. **Gate sparsity probing on fixed checkpoints** (P4) — re-run `gate_probing.ipynb` on the standard-scale HCRG checkpoints from `out-fixed/`. The convergence pattern (HCRG dips at iter 1000 then surpasses baseline by iter 2000) strongly suggests gates are learning non-trivial suppression patterns. Probing will confirm whether gates show per-head selectivity or are uniform dampeners. **Requires restarting the RunPod pod to download checkpoints** (only metrics.jsonl were saved before the pod was stopped).
+1. **TruthfulQA eval** (P1) — wire up EleutherAI's `lm-evaluation-harness` against the standard-scale HCRG checkpoints in `out-run3/out/standard/hcrg/`. The val loss improvement and gate probing results strongly suggest HCRG should reduce hallucinations; TruthfulQA would provide direct evidence.
 
-2. **Longer training** — the HCRG advantage is still growing at iter 2000 (the gap widens from iter 1500 to 2000). Training for more iterations (e.g. 5000–10000) could reveal whether the gain continues to compound or plateaus.
+2. **Longer training** — the HCRG advantage is still growing at iter 2000 (gap widens from −0.008 at iter 1500 to −0.016 at iter 2000). Training for 5000–10000 iterations could reveal whether the gain continues to compound or plateaus.
 
-3. **L1 sparsity regularizer** — the paper (§10) suggests a sparsity penalty on gate outputs to encourage selective head suppression. Even without it, HCRG already outperforms, but L1 regularization could amplify the effect. Add `--gate_l1_coeff` flag to `train.py`.
+3. **L1 sparsity regularizer** — the paper (§10) suggests a sparsity penalty on gate outputs. The gates already learned substantial sparsity without it (mean gate 0.66, 83% of heads < 0.9). Adding `--gate_l1_coeff` to `train.py` could push deeper suppression and potentially amplify the advantage.
 
-4. **TruthfulQA eval** (P1) — wire up EleutherAI's `lm-evaluation-harness` against the trained standard-scale HCRG checkpoint. The val loss improvement suggests better language modeling; TruthfulQA would test whether this translates to fewer hallucinations.
+4. **Larger scale** — the gain appeared at 124M / 1B tokens but not at 10M / 100M tokens. Testing at 350M+ params or 10B+ tokens would show whether the effect amplifies with scale, as the paper predicts.
 
-5. **Larger scale** — the gain appeared at 124M / 1B tokens but not at 10M / 100M tokens. Testing at 350M+ params or 10B+ tokens would show whether the effect amplifies with scale, as the paper predicts.
+5. **Head ablation study** — the gate probing identified specific heads that are almost fully suppressed (L11/H9 at 0.077, L10/H9 at 0.119). Pruning these heads from the baseline and comparing performance would validate whether the gates are identifying genuinely redundant computation.
 
 ---
 
@@ -284,18 +366,25 @@ Ran all 12 experiments on RunPod A100. Discovered `_GATE_BIAS_INIT` was `-5.0` (
 
 ### 2026-03-10 — Run 2 complete: HCRG outperforms baseline at standard scale
 
-All 12 runs finished on RunPod A100 (pod `ksskrgrxd1zj79`, now stopped). Metrics downloaded to `out-fixed/`. **Checkpoints were NOT downloaded before the pod was stopped** — restart the pod if gate probing is needed.
+All 12 runs finished on RunPod A100. Metrics downloaded to `out-fixed/`. Checkpoints lost on pod termination.
 
-**Key result:** At standard scale (124M params, 1B tokens), HCRG achieves **3.680 val loss vs baseline's 3.698** — a consistent -0.018 improvement across all 3 seeds, with lower variance and <0.1% parameter overhead.
+### 2026-03-11 — Run 3 complete + Gate probing confirms P4
+
+**Run 3 (reproducibility):** Re-ran all 12 experiments on RTX 6000 Ada. All checkpoints + metrics saved locally in `out-run3/out/`. Results reproduce within ±0.005 of Run 2 (HCRG advantage: −0.016 vs −0.018 on standard scale).
+
+**Gate probing (P4):** `full_analysis.py` confirms gates learned substantial, context-dependent suppression at standard scale:
+- Mean gate value = 0.66 (far from the 0.993 initialization)
+- 120/144 heads have mean gate < 0.9
+- Clear depth gradient: L0 open (0.99) → L11 heavily gated (0.27)
+- Within-prompt std = 0.14 (context-dependent, not static)
+- Consistent across 3 seeds (r ≈ 0.77)
+- Micro-scale gates stayed at 0.993 (insufficient training signal)
+
+**Status: P3 confirmed and reproduced. P4 confirmed. P1/P2/P5 remain untested.**
 
 **Next action for agent:**
 
-1. Review the Results section above for full analysis.
-2. To do gate probing (P4), restart the RunPod pod, download checkpoints:
-   ```bash
-   scp -P <port> -i ~/.ssh/id_ed25519 -r \
-     root@<ip>:/root/Veto/out ./out-fixed-full
-   ```
-   Then stop the pod immediately.
-3. Run `gate_probing.ipynb` on the standard-scale HCRG checkpoints.
-4. Consider longer training runs or L1 sparsity regularization (see "What to Build Next").
+1. Review the Results and Gate Probing sections above.
+2. Checkpoints available locally in `out-run3/out/` for further analysis.
+3. Priority: TruthfulQA eval (P1) using standard-scale HCRG checkpoints.
+4. See "What to Build Next" for full roadmap.
